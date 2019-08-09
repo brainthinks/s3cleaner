@@ -19,7 +19,7 @@ def main(args):
                     help="AWS Access Key")
   parser.add_option("--secret", dest="secret", metavar="SECRET",
                     help="AWS Access Secret Key")
-  parser.add_option("--deleteAfter", dest="deleteAfter", metavar="UNIX_TIMESTAMP",
+  parser.add_option("--newerThan", dest="newerThan", metavar="UNIX_TIMESTAMP",
                     help="Find or delete all files that were created after this timestamp (absolute, not relative)")
   parser.add_option("--bucket", dest="bucket", metavar="BUCKET",
                     help="Search for keys in a specific bucket")
@@ -34,7 +34,7 @@ def main(args):
   (config, args) = parser.parse_args(args)
 
   config_ok = True
-  for flag in ("key", "secret", "deleteAfter", "bucket", "dir", "log_file"):
+  for flag in ("key", "secret", "newerThan", "bucket", "dir", "log_file"):
     if getattr(config, flag) is None:
       print >>sys.stderr, "Missing required flag: --%s" % flag
       config_ok = False
@@ -51,7 +51,7 @@ def main(args):
   print
   print "Going to go through s3 bucket: %s" % (config.bucket)
   print "Going to go through directory: %s" % (config.dir)
-  print "Going to find/delete files that were created after: %s" % (config.deleteAfter)
+  print "Going to find/delete files that were created after: %s" % (config.newerThan)
   # print "Going to find/delete files that match this regex: %s" % (config.regex)
   print "Going to log output to file: %s" % (config.log_file + '.txt')
   print "Goint to delete files? %s" % (config.delete)
@@ -63,7 +63,7 @@ def main(args):
 
   print "Successfully connected to s3..."
 
-  config.deleteAfter = int(config.deleteAfter)
+  config.newerThan = int(config.newerThan)
   # config.regex = re.compile(config.regex)
 
   bucket = s3Connection.get_bucket(config.bucket)
@@ -78,13 +78,13 @@ def main(args):
     # Convert the last_modified time to a unix timestamp
     mtime = time.mktime(time.strptime(key.last_modified.split(".")[0], "%Y-%m-%dT%H:%M:%S"))
 
-    # Skip, file was created BEFORE the deleteAfter time
-    if mtime < config.deleteAfter:
+    # Skip, file was created BEFORE the newerThan time
+    if mtime < config.newerThan:
       continue
 
     if config.delete:
       file.write(u'Deleting: s3://{0}/{1}\n'.format(bucket.name, key.name))
-      file.write(u'  Key has age {0}, that is more recent than --deleteAfter {1}\n'.format(mtime, config.deleteAfter))
+      file.write(u'  Key has age {0}, that is more recent than --newerThan {1}\n'.format(mtime, config.newerThan))
       # print "  Key matches pattern /%s/" % (config.regex.pattern)
       # key.delete()
     else:
