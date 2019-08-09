@@ -11,7 +11,7 @@ import time
 from optparse import OptionParser
 import sys
 import re
-import pprint
+import io
 
 def main(args):
   parser = OptionParser()
@@ -27,12 +27,14 @@ def main(args):
                     help="Only consider keys in this DIR")
   # parser.add_option("--regex", dest="regex", metavar="REGEX",
   #                   help="Only consider keys matching this REGEX")
+  parser.add_option("--log_file", dest="log_file", metavar="FILE",
+                    help="The output will be written to this log FILE")
   parser.add_option("--delete", dest="delete", metavar="BOOLEAN", action="store_true",
                     default=False, help="Actually do a delete. If not specified, just list the keys found that match.")
   (config, args) = parser.parse_args(args)
 
   config_ok = True
-  for flag in ("key", "secret", "deleteAfter", "bucket", "dir"):
+  for flag in ("key", "secret", "deleteAfter", "bucket", "dir", "log_file"):
     if getattr(config, flag) is None:
       print >>sys.stderr, "Missing required flag: --%s" % flag
       config_ok = False
@@ -40,6 +42,8 @@ def main(args):
   if not config_ok:
     print >>sys.stderr, "Configuration is not ok, aborting..."
     return 1
+
+  file = io.open(config.log_file + ".txt", mode="w", encoding="utf-8")
 
   # print config.key
   # print config.secret
@@ -49,6 +53,7 @@ def main(args):
   print "Going to go through directory: %s" % (config.dir)
   print "Going to find/delete files that were created after: %s" % (config.deleteAfter)
   # print "Going to find/delete files that match this regex: %s" % (config.regex)
+  print "Going to log output to file: %s" % (config.log_file + '.txt')
   print "Goint to delete files? %s" % (config.delete)
   print
 
@@ -78,12 +83,14 @@ def main(args):
       continue
 
     if config.delete:
-      print "Deleting: s3://%s/%s" % (bucket.name, key.name)
-      print "  Key has age %s, that is more recent than --deleteAfter %s" % (mtime, config.deleteAfter)
+      file.write(u'Deleting: s3://{0}/{1}\n'.format(bucket.name, key.name))
+      file.write(u'  Key has age {0}, that is more recent than --deleteAfter {1}\n'.format(mtime, config.deleteAfter))
       # print "  Key matches pattern /%s/" % (config.regex.pattern)
       # key.delete()
     else:
-      print "%s --> s3://%s/%s" % (mtime, bucket.name, key.name)
+      file.write(u'{0} --> s3://{1}/{2}\n'.format(mtime, bucket.name, key.name))
+
+  file.close()
 
 
 if __name__ == '__main__':
