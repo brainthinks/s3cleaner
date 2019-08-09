@@ -14,6 +14,7 @@ import re
 import io
 
 def main(args):
+  # Define script arguments
   parser = OptionParser()
   parser.add_option("--key", dest="key", metavar="KEY",
                     help="AWS Access Key")
@@ -25,72 +26,96 @@ def main(args):
                     help="Search for keys in a specific bucket")
   parser.add_option("--dir", dest="dir", metavar="DIR",
                     help="Only consider keys in this DIR")
-  # parser.add_option("--regex", dest="regex", metavar="REGEX",
-  #                   help="Only consider keys matching this REGEX")
-  parser.add_option("--log_file", dest="log_file", metavar="FILE",
-                    help="The output will be written to this log FILE")
   parser.add_option("--delete", dest="delete", metavar="BOOLEAN", action="store_true",
                     default=False, help="Actually do a delete. If not specified, just list the keys found that match.")
   (config, args) = parser.parse_args(args)
 
+  # Confirm script arguments
   config_ok = True
-  for flag in ("key", "secret", "newerThan", "bucket", "dir", "log_file"):
+  for flag in ("key", "secret", "newerThan", "bucket", "dir"):
     if getattr(config, flag) is None:
       print >>sys.stderr, "Missing required flag: --%s" % flag
       config_ok = False
-
   if not config_ok:
     print >>sys.stderr, "Configuration is not ok, aborting..."
     return 1
 
-  file = io.open(config.log_file + ".txt", mode="w", encoding="utf-8")
+  # Define log files
+  filesToDeleteFileName = "files_newer_than_to_delete.txt"
+  filesToKeepFileName = "files_newer_than_to_keep.txt"
+
+  # Initialize log files
+  filesNewerThanToDeleteLogFile = io.open(filesToDeleteFileName, mode="w", encoding="utf-8")
+  filesNewerThanToKeepLogFile = io.open(filesToKeepFileName, mode="w", encoding="utf-8")
+
+  # If these strings are found in the filename (and it was created after a
+  # certain date/time), the file needs to be deleted
+  fileNameParts = [
+    "y4648e",
+    "73x5ed",
+    "cyf6x91y3g",
+    "nh0y6d4",
+    "dtp852",
+    "6ls25j9b",
+    "032iq",
+    "6aka2o",
+    "t45hu3pq",
+    "2kmr06k8y"
+  ]
 
   # print config.key
   # print config.secret
 
+  # Get confirmation from the user before continuing
   print
-  print "Going to go through s3 bucket: %s" % (config.bucket)
-  print "Going to go through directory: %s" % (config.dir)
-  print "Going to find/delete files that were created after: %s" % (config.newerThan)
-  # print "Going to find/delete files that match this regex: %s" % (config.regex)
-  print "Going to log output to file: %s" % (config.log_file + '.txt')
-  print "Goint to delete files? %s" % (config.delete)
+  print "Going to go through s3 bucket:\n %s \n" % (config.bucket)
+  print "Going to go through directory:\n %s \n" % (config.dir)
+  print "Going to find/delete files that were created after:\n %s \n" % (config.newerThan)
+  print "Going to find/delete files that contain an extension or prefix of any of the following:\n %s \n" % (', '.join(fileNameParts))
+  print "Going to log list of files to delete to:\n %s \n" % (filesToDeleteFileName)
+  print "Going to log list of files to keep to:\n %s \n" % (filesToKeepFileName)
+  print "Goint to delete files?\n %s \n" % (config.delete)
   print
-
   raw_input("If everything looks good, press Enter to continue...")
 
+  # Connect to s3
   s3Connection = S3Connection(config.key, config.secret)
-
   print "Successfully connected to s3..."
 
+  # Ensure the arguments have the correct types
   config.newerThan = int(config.newerThan)
-  # config.regex = re.compile(config.regex)
 
+  # Connect to the correct bucket
   bucket = s3Connection.get_bucket(config.bucket)
-
   print "About to go through every file in bucket %s/%s..." % (bucket.name, config.dir)
 
+  # Iterate over every single file in the specified directory
   for key in bucket.list(prefix=config.dir):
-    # # Skip, file does not match the pattern
-    # if config.regex.search(key.name) is None:
-    #   continue
-
     # Convert the last_modified time to a unix timestamp
     mtime = time.mktime(time.strptime(key.last_modified.split(".")[0], "%Y-%m-%dT%H:%M:%S"))
 
-    # Skip, file was created BEFORE the newerThan time
+    # If the file was created BEFORE the newerThan time, do not proceed
     if mtime < config.newerThan:
       continue
 
-    if config.delete:
-      file.write(u'Deleting: s3://{0}/{1}\n'.format(bucket.name, key.name))
-      file.write(u'  Key has age {0}, that is more recent than --newerThan {1}\n'.format(mtime, config.newerThan))
-      # print "  Key matches pattern /%s/" % (config.regex.pattern)
-      # key.delete()
-    else:
-      file.write(u'{0} --> s3://{1}/{2}\n'.format(mtime, bucket.name, key.name))
+    # Check for an extension or prefix (contains) in the file name
+    fileNameMatches = False
+    for fileNamePart in fileNameParts:
+      if fileNamePart in key.name:
+        fileNameMatches = True
+    if not fileNameMatches:
+      filesNewerThanToKeepLogFile.write(u's3://{0}/{1}\n'.format(bucket.name, key.name))
+      continue
 
-  file.close()
+    # If we've gotten this far, the file will be deleted
+    filesNewerThanToDeleteLogFile.write(u's3://{0}/{1}\n'.format(bucket.name, key.name))
+
+    if config.delete:
+      # key.delete()
+      continue
+
+  filesNewerThanToKeepLogFile.close()
+  filesNewerThanToDeleteLogFile.close()
 
 
 if __name__ == '__main__':
